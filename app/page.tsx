@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import ProductCard from "@/components/ProductCard"
 import Header from "@/components/Header"
 import Toast from "@/components/Toast"
+import CartDrawer from "@/components/CartDrawer"
 
 type Product = {
   id: string

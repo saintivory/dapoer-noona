@@ -11,12 +11,17 @@ type Product = {
   qty?: number
 }
 
-export default function CartDrawer({ open, onClose }: any) {
+type CartDrawerProps = {
+  open: boolean
+  onClose: () => void
+}
+
+export default function CartDrawer({ open, onClose }: CartDrawerProps) {
   const [cart, setCart] = useState<Product[]>([])
 
   useEffect(() => {
     const updateCart = () => {
-      const data = JSON.parse(localStorage.getItem("cart") || "[]")
+      const data = JSON.parse(localStorage.getItem("cart") || "[]") as Product[]
       setCart(data)
     }
 
@@ -33,14 +38,18 @@ export default function CartDrawer({ open, onClose }: any) {
 
   const increaseQty = (index: number) => {
     const newCart = [...cart]
-    newCart[index].qty = (newCart[index].qty || 1) + 1
+    const item = newCart[index]
+    if (!item) return
+    item.qty = (item.qty ?? 1) + 1
     updateCartStorage(newCart)
   }
 
   const decreaseQty = (index: number) => {
     const newCart = [...cart]
-    if ((newCart[index].qty || 1) > 1) {
-      newCart[index].qty -= 1
+    const item = newCart[index]
+    if (!item) return
+    if ((item.qty ?? 1) > 1) {
+      item.qty = (item.qty ?? 1) - 1
       updateCartStorage(newCart)
     }
   }
@@ -52,11 +61,10 @@ export default function CartDrawer({ open, onClose }: any) {
 
   const addToCart = (product: Product) => {
     const existingCart = JSON.parse(localStorage.getItem("cart") || "[]") as Product[]
-
-    // Cek apakah produk sudah ada di cart
     const index = existingCart.findIndex((p) => p.id === product.id)
+
     if (index >= 0) {
-      existingCart[index].qty = (existingCart[index].qty || 1) + 1
+      existingCart[index].qty = (existingCart[index].qty ?? 1) + 1
     } else {
       existingCart.push({ ...product, qty: 1 })
     }
@@ -64,17 +72,15 @@ export default function CartDrawer({ open, onClose }: any) {
     updateCartStorage(existingCart)
   }
 
-  const total = cart.reduce(
-    (sum, item) => sum + item.price * (item.qty || 1),
-    0
-  )
+  const total = cart.reduce((sum, item) => sum + item.price * (item.qty ?? 1), 0)
 
   const checkout = () => {
+    if (cart.length === 0) return
     const message = cart
       .map(
         (item) =>
-          `• ${item.name} (${item.qty || 1} Pcs) - Rp${(
-            item.price * (item.qty || 1)
+          `• ${item.name} (${item.qty ?? 1} Pcs) - Rp${(
+            item.price * (item.qty ?? 1)
           ).toLocaleString("id-ID")}`
       )
       .join("\n")
@@ -83,7 +89,7 @@ export default function CartDrawer({ open, onClose }: any) {
       "id-ID"
     )}\n\nNama:\nAlamat:\nTanggal kirim:\nCatatan:\n\nTerimakasih yaa..`
 
-    const phone = "6285642327934" // ganti nomor WA
+    const phone = "6285642327934"
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
     window.open(url, "_blank")
   }
@@ -120,12 +126,11 @@ export default function CartDrawer({ open, onClose }: any) {
                   alt={item.name}
                   className="w-16 h-16 object-cover rounded"
                 />
-
                 <div className="flex-1 flex flex-col">
                   <p className="font-bold text-sm line-clamp-2">{item.name}</p>
                   <p className="text-gray-500 text-xs">{item.category}</p>
                   <p className="font-bold text-sm mt-1">
-                    Rp{(item.price * (item.qty || 1)).toLocaleString("id-ID")}
+                    Rp{(item.price * (item.qty ?? 1)).toLocaleString("id-ID")}
                   </p>
 
                   <div className="flex items-center gap-2 mt-2">
@@ -135,7 +140,7 @@ export default function CartDrawer({ open, onClose }: any) {
                     >
                       -
                     </button>
-                    <span className="text-sm">{item.qty || 1}</span>
+                    <span className="text-sm">{item.qty ?? 1}</span>
                     <button
                       onClick={() => increaseQty(i)}
                       className="px-2 py-1 border rounded text-sm"
@@ -157,7 +162,9 @@ export default function CartDrawer({ open, onClose }: any) {
 
         {/* FOOTER */}
         <div className="p-4 border-t">
-          <p className="font-bold mb-2 text-lg">Total: Rp{total.toLocaleString("id-ID")}</p>
+          <p className="font-bold mb-2 text-lg">
+            Total: Rp{total.toLocaleString("id-ID")}
+          </p>
           <button
             onClick={checkout}
             className="w-full py-3 text-white rounded-lg bg-gradient-to-r from-[#FC8FA7] to-pink-400 font-medium"

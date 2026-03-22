@@ -10,6 +10,14 @@ type Product = {
   image: string
 }
 
+type FormProduct = {
+  id: string
+  name: string
+  price: string
+  category: string
+  image: string
+}
+
 export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [usernameInput, setUsernameInput] = useState("")
@@ -20,7 +28,7 @@ export default function AdminPage() {
   const [newCategory, setNewCategory] = useState("")
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormProduct>({
     id: "",
     name: "",
     price: "",
@@ -31,19 +39,16 @@ export default function AdminPage() {
   const ADMIN_USERNAME = "admin"
   const ADMIN_PASSWORD = "noona2026"
 
+  // ---------- Load data ----------
   useEffect(() => {
-    const productData: Product[] = JSON.parse(localStorage.getItem("products") || "[]")
+    const productData = JSON.parse(localStorage.getItem("products") || "[]") as Product[]
     setProducts(productData)
 
-    let categoryData: string[] = JSON.parse(localStorage.getItem("categories") || "[]")
+    const categoryData = JSON.parse(localStorage.getItem("categories") || "[]") as string[]
 
     if (categoryData.length === 0 && productData.length > 0) {
       const autoCategories: string[] = [
-        ...new Set(
-          productData
-            .map((p) => p.category)
-            .filter((c): c is string => typeof c === "string") // pastikan string
-        )
+        ...new Set(productData.map(p => p.category).filter((c): c is string => !!c))
       ]
       setCategories(autoCategories)
       localStorage.setItem("categories", JSON.stringify(autoCategories))
@@ -52,6 +57,7 @@ export default function AdminPage() {
     }
   }, [])
 
+  // ---------- Login ----------
   const login = () => {
     if (usernameInput === ADMIN_USERNAME && passwordInput === ADMIN_PASSWORD) {
       setIsLoggedIn(true)
@@ -60,65 +66,67 @@ export default function AdminPage() {
     }
   }
 
+  // ---------- Save products ----------
   const saveProducts = (data: Product[]) => {
     setProducts(data)
     localStorage.setItem("products", JSON.stringify(data))
   }
 
+  // ---------- Handle add/edit ----------
   const handleSubmit = () => {
     if (!form.name || !form.price || !form.category) {
       alert("Isi semua field!")
       return
     }
 
-    let updated = [...products]
+    const priceNum = Number(form.price)
+    if (isNaN(priceNum)) {
+      alert("Harga harus angka!")
+      return
+    }
+
+    const updated = [...products]
 
     if (editIndex !== null) {
       updated[editIndex] = {
         ...form,
-        price: Number(form.price),
-        id: form.id || `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        price: priceNum,
+        id: form.id || `${Date.now()}-${Math.floor(Math.random() * 1000)}`
       }
     } else {
       updated.push({
         ...form,
-        price: Number(form.price),
-        id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        price: priceNum,
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`
       })
     }
 
     saveProducts(updated)
 
-    setForm({
-      id: "",
-      name: "",
-      price: "",
-      category: "",
-      image: "",
-    })
+    setForm({ id: "", name: "", price: "", category: "", image: "" })
     setEditIndex(null)
   }
 
+  // ---------- Delete ----------
   const deleteProduct = (index: number) => {
     const updated = products.filter((_, i) => i !== index)
     saveProducts(updated)
   }
 
+  // ---------- Add category ----------
   const addCategory = () => {
     if (!newCategory) return
-
     if (categories.includes(newCategory)) {
       alert("Kategori sudah ada!")
       return
     }
-
     const updated = [...categories, newCategory]
     setCategories(updated)
     localStorage.setItem("categories", JSON.stringify(updated))
     setNewCategory("")
   }
 
-  // ---------- RENDER ----------
+  // ---------- RENDER LOGIN ----------
   if (!isLoggedIn) {
     return (
       <div className="p-6 max-w-sm mx-auto mt-20 shadow-md rounded bg-white">
@@ -126,14 +134,14 @@ export default function AdminPage() {
         <input
           placeholder="Username"
           value={usernameInput}
-          onChange={(e) => setUsernameInput(e.target.value)}
+          onChange={e => setUsernameInput(e.target.value)}
           className="border p-2 w-full rounded mb-3"
         />
         <input
           placeholder="Password"
           type="password"
           value={passwordInput}
-          onChange={(e) => setPasswordInput(e.target.value)}
+          onChange={e => setPasswordInput(e.target.value)}
           className="border p-2 w-full rounded mb-3"
         />
         <button
@@ -146,6 +154,7 @@ export default function AdminPage() {
     )
   }
 
+  // ---------- RENDER ADMIN PAGE ----------
   return (
     <div className="p-6 max-w-xl mx-auto">
       <h1 className="text-xl font-bold mb-4">Admin Produk</h1>
@@ -155,19 +164,19 @@ export default function AdminPage() {
         <input
           placeholder="Nama Produk"
           value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          onChange={e => setForm({ ...form, name: e.target.value })}
           className="border p-2 w-full rounded"
         />
         <input
           placeholder="Harga"
           type="number"
           value={form.price}
-          onChange={(e) => setForm({ ...form, price: e.target.value })}
+          onChange={e => setForm({ ...form, price: e.target.value })}
           className="border p-2 w-full rounded"
         />
         <select
           value={form.category}
-          onChange={(e) => setForm({ ...form, category: e.target.value })}
+          onChange={e => setForm({ ...form, category: e.target.value })}
           className="border p-2 w-full rounded"
         >
           <option value="">Pilih Kategori</option>
@@ -175,22 +184,26 @@ export default function AdminPage() {
             <option key={i} value={cat}>{cat}</option>
           ))}
         </select>
+
         <div className="flex gap-2">
           <input
             placeholder="Kategori baru"
             value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
+            onChange={e => setNewCategory(e.target.value)}
             className="border p-2 w-full rounded"
           />
           <button
             onClick={addCategory}
             className="px-4 bg-black text-white rounded"
-          >+</button>
+          >
+            +
+          </button>
         </div>
+
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => {
+          onChange={e => {
             const file = e.target.files?.[0]
             if (!file) return
             const reader = new FileReader()
@@ -201,12 +214,11 @@ export default function AdminPage() {
           }}
           className="border p-2 w-full rounded"
         />
+
         {form.image && (
-          <img
-            src={form.image}
-            className="w-full h-40 object-cover rounded"
-          />
+          <img src={form.image} className="w-full h-40 object-cover rounded" />
         )}
+
         <button
           onClick={handleSubmit}
           className="w-full py-2 text-white rounded bg-[#FC8FA7]"
@@ -217,11 +229,9 @@ export default function AdminPage() {
 
       {/* LIST PRODUK */}
       {products.map((p, i) => (
-        <div key={i} className="flex justify-between items-center border-b py-3">
+        <div key={p.id} className="flex justify-between items-center border-b py-3">
           <div className="flex items-center gap-3">
-            {p.image && (
-              <img src={p.image} className="w-14 h-14 object-cover rounded" />
-            )}
+            {p.image && <img src={p.image} className="w-14 h-14 object-cover rounded" />}
             <div>
               <p className="font-medium">{p.name}</p>
               <p className="text-sm text-gray-500">
@@ -232,7 +242,13 @@ export default function AdminPage() {
           <div className="flex items-center">
             <button
               onClick={() => {
-                setForm(p)
+                setForm({
+                  id: p.id,
+                  name: p.name,
+                  price: p.price.toString(),
+                  category: p.category,
+                  image: p.image
+                })
                 setEditIndex(i)
               }}
               className="text-blue-500 text-sm mr-3"
