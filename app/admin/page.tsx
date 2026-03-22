@@ -32,14 +32,18 @@ export default function AdminPage() {
   const ADMIN_PASSWORD = "noona2026"
 
   useEffect(() => {
-    const productData = JSON.parse(localStorage.getItem("products") || "[]")
+    const productData: Product[] = JSON.parse(localStorage.getItem("products") || "[]")
     setProducts(productData)
 
-    let categoryData = JSON.parse(localStorage.getItem("categories") || "[]")
+    let categoryData: string[] = JSON.parse(localStorage.getItem("categories") || "[]")
 
     if (categoryData.length === 0 && productData.length > 0) {
-      const autoCategories = [
-        ...new Set(productData.map((p: any) => p.category)),
+      const autoCategories: string[] = [
+        ...new Set(
+          productData
+            .map((p) => p.category)
+            .filter((c): c is string => typeof c === "string") // pastikan string
+        )
       ]
       setCategories(autoCategories)
       localStorage.setItem("categories", JSON.stringify(autoCategories))
@@ -70,14 +74,12 @@ export default function AdminPage() {
     let updated = [...products]
 
     if (editIndex !== null) {
-      // EDIT MODE
       updated[editIndex] = {
         ...form,
         price: Number(form.price),
         id: form.id || `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       }
     } else {
-      // ADD MODE
       updated.push({
         ...form,
         price: Number(form.price),
@@ -94,7 +96,6 @@ export default function AdminPage() {
       category: "",
       image: "",
     })
-
     setEditIndex(null)
   }
 
@@ -157,7 +158,6 @@ export default function AdminPage() {
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="border p-2 w-full rounded"
         />
-
         <input
           placeholder="Harga"
           type="number"
@@ -165,7 +165,6 @@ export default function AdminPage() {
           onChange={(e) => setForm({ ...form, price: e.target.value })}
           className="border p-2 w-full rounded"
         />
-
         <select
           value={form.category}
           onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -176,7 +175,6 @@ export default function AdminPage() {
             <option key={i} value={cat}>{cat}</option>
           ))}
         </select>
-
         <div className="flex gap-2">
           <input
             placeholder="Kategori baru"
@@ -189,14 +187,12 @@ export default function AdminPage() {
             className="px-4 bg-black text-white rounded"
           >+</button>
         </div>
-
         <input
           type="file"
           accept="image/*"
           onChange={(e) => {
             const file = e.target.files?.[0]
             if (!file) return
-
             const reader = new FileReader()
             reader.onloadend = () => {
               setForm({ ...form, image: reader.result as string })
@@ -205,14 +201,12 @@ export default function AdminPage() {
           }}
           className="border p-2 w-full rounded"
         />
-
         {form.image && (
           <img
             src={form.image}
             className="w-full h-40 object-cover rounded"
           />
         )}
-
         <button
           onClick={handleSubmit}
           className="w-full py-2 text-white rounded bg-[#FC8FA7]"
@@ -235,7 +229,6 @@ export default function AdminPage() {
               </p>
             </div>
           </div>
-
           <div className="flex items-center">
             <button
               onClick={() => {
