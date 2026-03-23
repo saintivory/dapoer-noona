@@ -28,8 +28,10 @@ export default function AdminPage() {
   const ADMIN_USERNAME = "admin"
   const ADMIN_PASSWORD = "noona2026"
 
-  // LOGIN
-  useEffect(() => { if (localStorage.getItem("admin_login") === "true") setIsLoggedIn(true) }, [])
+  // ✅ LOGIN
+  useEffect(() => {
+    if (localStorage.getItem("admin_login") === "true") setIsLoggedIn(true)
+  }, [])
   const login = () => {
     if (usernameInput === ADMIN_USERNAME && passwordInput === ADMIN_PASSWORD) {
       setIsLoggedIn(true)
@@ -37,7 +39,7 @@ export default function AdminPage() {
     } else setToast("Username / Password salah")
   }
 
-  // FETCH DATA
+  // ✅ FETCH DATA
   useEffect(() => {
     if (isLoggedIn) { fetchProducts(); fetchCategories() }
   }, [isLoggedIn])
@@ -59,7 +61,7 @@ export default function AdminPage() {
     else setCategories(data || [])
   }
 
-  // UPLOAD IMAGE
+  // ✅ UPLOAD IMAGE
   const uploadImage = async (file: File) => {
     const fileName = `${Date.now()}-${file.name}`
     const { error } = await supabase.storage.from("product-images").upload(fileName, file)
@@ -75,7 +77,7 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  // TAMBAH / EDIT PRODUK
+  // ✅ TAMBAH / EDIT PRODUK
   const handleSubmit = async () => {
     if (!form.name || !form.price || !form.category) { setToast("Isi semua field!"); return }
     setLoading(true)
@@ -101,7 +103,7 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  // TAMBAH KATEGORI
+  // ✅ KATEGORI
   const addCategory = async () => {
     if (!newCategory.trim()) { setToast("Nama kategori tidak boleh kosong"); return }
     try {
@@ -119,7 +121,6 @@ export default function AdminPage() {
     } catch (err) { console.error(err); setToast("Gagal menambahkan kategori") }
   }
 
-  // EDIT / HAPUS KATEGORI
   const updateCategory = async () => {
     if (!editCategoryId || !editCategoryName.trim()) { setToast("Nama kategori tidak boleh kosong"); return }
     try {
@@ -143,7 +144,7 @@ export default function AdminPage() {
     setToast("Kategori dihapus")
   }
 
-  // HAPUS PRODUK
+  // ✅ HAPUS PRODUK
   const deleteProduct = async (p: Product) => {
     if (!confirm("Yakin hapus produk?")) return
     const { error } = await supabase.from("products").delete().eq("id", p.id)
@@ -161,12 +162,12 @@ export default function AdminPage() {
     fetchProducts()
   }
 
-  // PAGINATION + SEARCH
+  // ✅ PAGINATION + SEARCH
   const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
   const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
 
-  // UI LOGIN
+  // ✅ UI LOGIN
   if (!isLoggedIn) return (
     <div className="min-h-screen flex items-center justify-center bg-white text-black">
       <div className="p-6 w-full max-w-sm shadow-md rounded-2xl space-y-3">

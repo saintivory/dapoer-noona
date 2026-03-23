@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react"
 import CartDrawer from "./CartDrawer"
+import { Product } from "@/types/product"
 
 type HeaderProps = {
   searchQuery: string
   setSearchQuery: (value: string) => void
-  logoSrc?: string // path/logo image
+  logoSrc?: string
+  products: Product[] // 🔹 Tambahkan ini
 }
 
-export default function Header({ searchQuery, setSearchQuery, logoSrc }: HeaderProps) {
+export default function Header({ searchQuery, setSearchQuery, logoSrc, products }: HeaderProps) {
   const [cartCount, setCartCount] = useState(0)
   const [openCart, setOpenCart] = useState(false)
 
@@ -67,7 +69,8 @@ export default function Header({ searchQuery, setSearchQuery, logoSrc }: HeaderP
         </div>
       </header>
 
-      <CartDrawer open={openCart} onClose={() => setOpenCart(false)} />
+      {/* 🔹 Kirim products ke CartDrawer */}
+      <CartDrawer open={openCart} onClose={() => setOpenCart(false)} products={products} />
     </>
   )
 }

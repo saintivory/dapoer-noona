@@ -1,114 +1,74 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
-
-type Product = {
-  id: string
-  name: string
-  price: number
-  image: string | null
-  category?: string
-  categories?: {
-    name: string
-  }
-  qty?: number
-}
+import { Product } from "@/types/product"
 
 type CartDrawerProps = {
   open: boolean
   onClose: () => void
+  products: Product[] // supabase products dari Home
 }
 
-export default function CartDrawer({ open, onClose }: CartDrawerProps) {
-  const [cart, setCart] = useState<Product[]>([])
+export default function CartDrawer({ open, onClose, products }: CartDrawerProps) {
+  const [cart, setCart] = useState<(Product & { qty: number; category?: string })[]>([])
 
-  // 🔥 LOAD + SYNC CART
+  // 🔥 Load cart dari localStorage
   useEffect(() => {
-    const updateCart = () => {
-      const data = JSON.parse(localStorage.getItem("cart") || "[]")
-      setCart(data)
-    }
-
-    updateCart()
-
-    const handleAdd = async (e: any) => {
-      const id = e.detail
-
-      const { data } = await supabase
-        .from("products")
-        .select("*, categories(name)")
-        .eq("id", id)
-        .single()
-
-      if (!data) return
-
-      const existingCart = JSON.parse(localStorage.getItem("cart") || "[]")
-
-      const index = existingCart.findIndex((p: any) => p.id === id)
-
-      if (index >= 0) {
-        existingCart[index].qty =
-          (existingCart[index].qty ?? 1) + 1
-      } else {
-        existingCart.push({
-          ...data,
-          category: data.categories?.name,
-          qty: 1,
-        })
-      }
-
-      localStorage.setItem("cart", JSON.stringify(existingCart))
-      updateCart()
-    }
-
-    window.addEventListener("addToCart", handleAdd)
-    window.addEventListener("cartUpdated", updateCart)
-
-    return () => {
-      window.removeEventListener("addToCart", handleAdd)
-      window.removeEventListener("cartUpdated", updateCart)
-    }
+    const saved = JSON.parse(localStorage.getItem("cart") || "[]")
+    setCart(saved)
   }, [])
 
-  // 🔥 UPDATE LOCAL STORAGE
-  const updateCartStorage = (newCart: Product[]) => {
+  // 🔥 Update localStorage & state
+  const updateCartStorage = (newCart: typeof cart) => {
     setCart(newCart)
     localStorage.setItem("cart", JSON.stringify(newCart))
-    window.dispatchEvent(new Event("cartUpdated"))
   }
 
-  const increaseQty = (index: number) => {
-    const newCart = [...cart]
-    const item = newCart[index]
-    if (!item) return
-    item.qty = (item.qty ?? 1) + 1
-    updateCartStorage(newCart)
-  }
+  // 🔹 Event listener untuk tambah ke cart
+  useEffect(() => {
+    const handleAdd = (e: CustomEvent<string>) => {
+      const productId = e.detail
+      const prod = products.find((p) => p.id === productId)
+      if (!prod) return
 
-  const decreaseQty = (index: number) => {
-    const newCart = [...cart]
-    const item = newCart[index]
-    if (!item) return
-    if ((item.qty ?? 1) > 1) {
-      item.qty = (item.qty ?? 1) - 1
+      const newCart = [...cart]
+      const index = newCart.findIndex((p) => p.id === prod.id)
+      if (index >= 0) {
+        newCart[index].qty = (newCart[index].qty ?? 1) + 1
+      } else {
+        newCart.push({ ...prod, qty: 1, category: prod.categories?.name })
+      }
       updateCartStorage(newCart)
     }
-  }
 
-  const removeItem = (index: number) => {
-    const newCart = cart.filter((_, i) => i !== index)
+    window.addEventListener("addToCart", handleAdd as EventListener)
+    return () => {
+      window.removeEventListener("addToCart", handleAdd as EventListener)
+    }
+  }, [cart, products])
+
+  // 🔹 Ubah qty & hapus
+  const increaseQty = (i: number) => {
+    const newCart = [...cart]
+    newCart[i].qty = (newCart[i].qty ?? 1) + 1
     updateCartStorage(newCart)
   }
 
-  const total = cart.reduce(
-    (sum, item) => sum + item.price * (item.qty ?? 1),
-    0
-  )
+  const decreaseQty = (i: number) => {
+    const newCart = [...cart]
+    if ((newCart[i].qty ?? 1) > 1) newCart[i].qty!--
+    updateCartStorage(newCart)
+  }
+
+  const removeItem = (i: number) => {
+    const newCart = cart.filter((_, idx) => idx !== i)
+    updateCartStorage(newCart)
+  }
+
+  const total = cart.reduce((sum, item) => sum + item.price * (item.qty ?? 1), 0)
 
   const checkout = () => {
-    if (cart.length === 0) return
-
+    if (!cart.length) return
     const message = cart
       .map(
         (item) =>
@@ -123,18 +83,12 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
     )}\n\nNama:\nAlamat:\nTanggal kirim:\nCatatan:\n\nTerimakasih yaa..`
 
     const phone = "6285642327934"
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
-    window.open(url, "_blank")
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank")
   }
 
   return (
     <>
-      {open && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
-        />
-      )}
+      {open && <div onClick={onClose} className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" />}
 
       <div
         className={`fixed top-0 right-0 h-full w-80 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${
@@ -149,53 +103,23 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
         {/* CONTENT */}
         <div className="p-4 overflow-y-auto h-[calc(100%-180px)]">
-          {cart.length === 0 ? (
+          {!cart.length ? (
             <p className="text-gray-500">Keranjang kosong</p>
           ) : (
             cart.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 border-b pb-3 mb-3">
-                <img
-                  src={item.image || "/no-image.png"}
-                  alt={item.name}
-                  className="w-16 h-16 object-cover rounded"
-                />
-
+              <div key={item.id} className="flex items-center gap-3 border-b pb-3 mb-3">
+                <img src={item.image || "/no-image.png"} alt={item.name} className="w-16 h-16 object-cover rounded" />
                 <div className="flex-1 flex flex-col">
-                  <p className="font-bold text-sm line-clamp-2">
-                    {item.name}
-                  </p>
-
-                  <p className="text-gray-500 text-xs">
-                    {item.category || item.categories?.name}
-                  </p>
-
+                  <p className="font-bold text-sm line-clamp-2">{item.name}</p>
+                  <p className="text-gray-500 text-xs">{item.category || item.categories?.name}</p>
                   <p className="font-bold text-sm mt-1">
                     Rp{(item.price * (item.qty ?? 1)).toLocaleString("id-ID")}
                   </p>
-
                   <div className="flex items-center gap-2 mt-2">
-                    <button
-                      onClick={() => decreaseQty(i)}
-                      className="px-2 py-1 shadow rounded text-sm"
-                    >
-                      -
-                    </button>
-
+                    <button onClick={() => decreaseQty(i)} className="px-2 py-1 shadow rounded text-sm">-</button>
                     <span className="text-sm">{item.qty ?? 1}</span>
-
-                    <button
-                      onClick={() => increaseQty(i)}
-                      className="px-2 py-1 shadow rounded text-sm"
-                    >
-                      +
-                    </button>
-
-                    <button
-                      onClick={() => removeItem(i)}
-                      className="ml-auto text-red-500 text-sm"
-                    >
-                      Hapus
-                    </button>
+                    <button onClick={() => increaseQty(i)} className="px-2 py-1 shadow rounded text-sm">+</button>
+                    <button onClick={() => removeItem(i)} className="ml-auto text-red-500 text-sm">Hapus</button>
                   </div>
                 </div>
               </div>
@@ -205,10 +129,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
         {/* FOOTER */}
         <div className="p-4 border-t">
-          <p className="font-bold mb-2 text-lg">
-            Total: Rp{total.toLocaleString("id-ID")}
-          </p>
-
+          <p className="font-bold mb-2 text-lg">Total: Rp{total.toLocaleString("id-ID")}</p>
           <button
             onClick={checkout}
             className="w-full py-3 text-white rounded-lg bg-gradient-to-r from-[#FC8FA7] to-[#F76C8F] shadow hover:scale-[1.02] transition"
