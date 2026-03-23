@@ -1,19 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import ProductCard from "@/components/ProductCard"
 import Header from "@/components/Header"
 import Toast from "@/components/Toast"
 import CartDrawer from "@/components/CartDrawer"
-
-type Product = {
-  id: string
-  name: string
-  price: number
-  category: string
-  image: string
-  qty?: number
-}
+import { Product } from "@/types/product" // ✅ pakai ini aja, jangan bikin ulang
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([])
@@ -22,41 +15,74 @@ export default function Home() {
   const [sortOption, setSortOption] = useState("default")
   const [toastMessage, setToastMessage] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [cartOpen, setCartOpen] = useState(false) // ✅ FIX penting
+
   const itemsPerPage = 25
 
+  // 🔥 FETCH SUPABASE
   useEffect(() => {
-    const stored = localStorage.getItem("products")
-    if (stored) setProducts(JSON.parse(stored))
+    fetchProducts()
   }, [])
 
-  const categories = ["All", ...new Set(products.map(p => p.category))]
+  const fetchProducts = async () => {
+    setLoading(true)
 
-  let filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    (selectedCategory === "All" ? true : p.category === selectedCategory)
-  )
+    const { data } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .order("created_at", { ascending: false })
 
-  if (sortOption === "mahal") filteredProducts.sort((a, b) => b.price - a.price)
-  else if (sortOption === "murah") filteredProducts.sort((a, b) => a.price - b.price)
-  else if (sortOption === "a-z") filteredProducts.sort((a, b) => a.name.localeCompare(b.name))
-  else if (sortOption === "z-a") filteredProducts.sort((a, b) => b.name.localeCompare(a.name))
+    setProducts(data || [])
+    setLoading(false)
+  }
 
-  // Pagination
+  // 🔥 CATEGORY DARI DB
+  const categories = [
+    "All",
+    ...new Set(products.map((p) => p.categories?.name || "-")),
+  ]
+
+  // 🔥 FILTER
+  let filteredProducts = products.filter((p) => {
+    const matchSearch = p.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
+
+    const matchCategory =
+      selectedCategory === "All"
+        ? true
+        : p.categories?.name === selectedCategory
+
+    return matchSearch && matchCategory
+  })
+
+  // 🔥 SORT
+  if (sortOption === "mahal")
+    filteredProducts.sort((a, b) => b.price - a.price)
+  else if (sortOption === "murah")
+    filteredProducts.sort((a, b) => a.price - b.price)
+  else if (sortOption === "a-z")
+    filteredProducts.sort((a, b) => a.name.localeCompare(b.name))
+  else if (sortOption === "z-a")
+    filteredProducts.sort((a, b) => b.name.localeCompare(a.name))
+
+  // 🔥 PAGINATION
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage)
+  const paginatedProducts = filteredProducts.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  )
 
+  // 🔥 ADD TO CART
   const handleAddToCart = (product: Product) => {
-    const existingCart = JSON.parse(localStorage.getItem("cart") || "[]") as Product[]
-    const index = existingCart.findIndex((p) => p.id === product.id)
-    if (index >= 0) {
-      existingCart[index].qty = (existingCart[index].qty || 1) + 1
-    } else {
-      existingCart.push({ ...product, qty: 1 })
-    }
-    localStorage.setItem("cart", JSON.stringify(existingCart))
-    window.dispatchEvent(new Event("cartUpdated"))
-    setToastMessage(`Barang "${product.name}" ditambahkan ke keranjang`)
+    window.dispatchEvent(
+      new CustomEvent("addToCart", { detail: product.id })
+    )
+
+    setToastMessage(`"${product.name}" ditambahkan ke keranjang`)
+    setCartOpen(true) // ✅ langsung buka drawer biar kerasa hidup
   }
 
   return (
@@ -68,18 +94,28 @@ export default function Home() {
       />
 
       <div className="p-4 max-w-7xl mx-auto flex-1">
-        <h1 className="text-xl md:text-2xl font-bold mb-2">Selamat Datang di Dapoer Noona</h1>
-        <p className="text-gray-500 mb-4">Silahkan pilih snack favorit kamu!</p>
+        <h1 className="text-xl md:text-2xl font-bold mb-2">
+          Selamat Datang di Dapoer Noona
+        </h1>
 
-        {/* KATEGORI + SORT */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-2">
-          <div className="flex gap-2 overflow-x-auto flex-1">
+        <p className="text-gray-500 mb-4">
+          Silahkan pilih snack favorit kamu!
+        </p>
+
+        {/* FILTER */}
+        <div className="flex flex-col md:flex-row justify-between mb-6 gap-2">
+          <div className="flex gap-2 overflow-x-auto">
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => { setSelectedCategory(cat); setCurrentPage(1) }}
-                className={`px-3 py-1 text-sm rounded-full whitespace-nowrap ${
-                  selectedCategory === cat ? "bg-black text-white" : "bg-white shadow-sm"
+                onClick={() => {
+                  setSelectedCategory(cat)
+                  setCurrentPage(1)
+                }}
+                className={`px-3 py-1 text-sm rounded-full ${
+                  selectedCategory === cat
+                    ? "bg-black text-white"
+                    : "bg-white shadow"
                 }`}
               >
                 {cat}
@@ -87,56 +123,73 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="ml-0 md:ml-2 w-full md:w-auto">
-            <select
-              value={sortOption}
-              onChange={(e) => { setSortOption(e.target.value); setCurrentPage(1) }}
-              className="border rounded-lg px-3 py-1 shadow-sm w-full md:w-auto"
-            >
-              <option value="default">Urutkan</option>
-              <option value="mahal">Harga Tertinggi</option>
-              <option value="murah">Harga Termurah</option>
-              <option value="a-z">A-Z</option>
-              <option value="z-a">Z-A</option>
-            </select>
-          </div>
+          <select
+            value={sortOption}
+            onChange={(e) => {
+              setSortOption(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="px-3 py-1 rounded-lg shadow"
+          >
+            <option value="default">Urutkan</option>
+            <option value="mahal">Harga Tertinggi</option>
+            <option value="murah">Harga Termurah</option>
+            <option value="a-z">A-Z</option>
+            <option value="z-a">Z-A</option>
+          </select>
         </div>
 
-        {/* GRID PRODUK */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {paginatedProducts.map((product, index) => (
-            <ProductCard
-              key={index}
-              product={product}
-              onAddToCart={() => handleAddToCart(product)}
-            />
-          ))}
-        </div>
+        {/* GRID */}
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-white h-40 rounded-xl animate-pulse shadow"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {paginatedProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onAddToCart={handleAddToCart}
+              />
+            ))}
+          </div>
+        )}
 
         {/* PAGINATION */}
         {totalPages > 1 && (
           <div className="flex justify-center mt-6 gap-2 flex-wrap">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
-              <button
-                key={num}
-                onClick={() => setCurrentPage(num)}
-                className={`px-3 py-1 rounded ${
-                  currentPage === num ? "bg-black text-white" : "bg-white shadow-sm"
-                }`}
-              >
-                {num}
-              </button>
-            ))}
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+              (num) => (
+                <button
+                  key={num}
+                  onClick={() => setCurrentPage(num)}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === num
+                      ? "bg-black text-white"
+                      : "bg-white shadow"
+                  }`}
+                >
+                  {num}
+                </button>
+              )
+            )}
           </div>
         )}
       </div>
 
-      {/* FOOTER */}
-      <footer className="shadow-sm mt-6 p-4 text-center font-bold rounded-t-md bg-white">
+      <footer className="shadow mt-6 p-4 text-center font-bold bg-white">
         © Dapoer Noona - 2026
       </footer>
 
-      {/* TOAST */}
+      {/* ✅ FIX: sekarang bisa kebuka */}
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+
       {toastMessage && <Toast message={toastMessage} />}
     </main>
   )

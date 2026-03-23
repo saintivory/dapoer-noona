@@ -1,269 +1,266 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
+import Toast from "@/components/Toast"
 
-type Product = {
-  id: string
-  name: string
-  price: number
-  category: string
-  image: string
-}
-
-type FormProduct = {
-  id: string
-  name: string
-  price: string
-  category: string
-  image: string
-}
+type Category = { id: string; name: string }
+type Product = { id: string; name: string; price: number; image: string; category_id: string; categories?: { name: string } }
 
 export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [usernameInput, setUsernameInput] = useState("")
   const [passwordInput, setPasswordInput] = useState("")
-
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadingFetch, setLoadingFetch] = useState(true)
+  const [toast, setToast] = useState("")
+  const [selected, setSelected] = useState<string[]>([])
+  const [form, setForm] = useState({ id: "", name: "", price: "", category: "", image: "", oldImage: "" })
   const [newCategory, setNewCategory] = useState("")
-  const [editIndex, setEditIndex] = useState<number | null>(null)
-
-  const [form, setForm] = useState<FormProduct>({
-    id: "",
-    name: "",
-    price: "",
-    category: "",
-    image: "",
-  })
+  const [editCategoryId, setEditCategoryId] = useState<string | null>(null)
+  const [editCategoryName, setEditCategoryName] = useState("")
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const ITEMS_PER_PAGE = 5
 
   const ADMIN_USERNAME = "admin"
   const ADMIN_PASSWORD = "noona2026"
 
-  // ---------- Load data ----------
-  useEffect(() => {
-    const productData = JSON.parse(localStorage.getItem("products") || "[]") as Product[]
-    setProducts(productData)
-
-    const categoryData = JSON.parse(localStorage.getItem("categories") || "[]") as string[]
-
-    if (categoryData.length === 0 && productData.length > 0) {
-      const autoCategories: string[] = [
-        ...new Set(productData.map(p => p.category).filter((c): c is string => !!c))
-      ]
-      setCategories(autoCategories)
-      localStorage.setItem("categories", JSON.stringify(autoCategories))
-    } else {
-      setCategories(categoryData)
-    }
-  }, [])
-
-  // ---------- Login ----------
+  // LOGIN
+  useEffect(() => { if (localStorage.getItem("admin_login") === "true") setIsLoggedIn(true) }, [])
   const login = () => {
     if (usernameInput === ADMIN_USERNAME && passwordInput === ADMIN_PASSWORD) {
       setIsLoggedIn(true)
-    } else {
-      alert("Username atau password salah!")
-    }
+      localStorage.setItem("admin_login", "true")
+    } else setToast("Username / Password salah")
   }
 
-  // ---------- Save products ----------
-  const saveProducts = (data: Product[]) => {
-    setProducts(data)
-    localStorage.setItem("products", JSON.stringify(data))
+  // FETCH DATA
+  useEffect(() => {
+    if (isLoggedIn) { fetchProducts(); fetchCategories() }
+  }, [isLoggedIn])
+
+  const fetchProducts = async () => {
+    setLoadingFetch(true)
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .order("created_at", { ascending: false })
+    if (error) console.error(error)
+    else setProducts(data || [])
+    setLoadingFetch(false)
   }
 
-  // ---------- Handle add/edit ----------
-  const handleSubmit = () => {
-    if (!form.name || !form.price || !form.category) {
-      alert("Isi semua field!")
-      return
-    }
+  const fetchCategories = async () => {
+    const { data, error } = await supabase.from("categories").select("*")
+    if (error) console.error(error)
+    else setCategories(data || [])
+  }
 
-    const priceNum = Number(form.price)
-    if (isNaN(priceNum)) {
-      alert("Harga harus angka!")
-      return
-    }
+  // UPLOAD IMAGE
+  const uploadImage = async (file: File) => {
+    const fileName = `${Date.now()}-${file.name}`
+    const { error } = await supabase.storage.from("product-images").upload(fileName, file)
+    if (error) { console.error(error); setToast("Gagal upload image"); return null }
+    const { data } = supabase.storage.from("product-images").getPublicUrl(fileName)
+    return data.publicUrl
+  }
 
-    const updated = [...products]
+  const handleImage = async (file: File) => {
+    setLoading(true)
+    const url = await uploadImage(file)
+    if (url) setForm({ ...form, image: url })
+    setLoading(false)
+  }
 
-    if (editIndex !== null) {
-      updated[editIndex] = {
-        ...form,
-        price: priceNum,
-        id: form.id || `${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  // TAMBAH / EDIT PRODUK
+  const handleSubmit = async () => {
+    if (!form.name || !form.price || !form.category) { setToast("Isi semua field!"); return }
+    setLoading(true)
+    try {
+      if (form.id) {
+        const { error } = await supabase
+          .from("products")
+          .update({ name: form.name, price: Number(form.price), category_id: form.category, image: form.image })
+          .eq("id", form.id)
+        if (error) throw error
+        setToast("Produk diupdate")
+      } else {
+        const { data, error } = await supabase
+          .from("products")
+          .insert([{ name: form.name, price: Number(form.price), category_id: form.category, image: form.image }])
+          .select()
+        if (error) throw error
+        setToast("Produk ditambahkan")
       }
-    } else {
-      updated.push({
-        ...form,
-        price: priceNum,
-        id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`
-      })
-    }
-
-    saveProducts(updated)
-
-    setForm({ id: "", name: "", price: "", category: "", image: "" })
-    setEditIndex(null)
+    } catch (err) { console.error(err); setToast("Gagal menambahkan produk") }
+    setForm({ id: "", name: "", price: "", category: "", image: "", oldImage: "" })
+    fetchProducts()
+    setLoading(false)
   }
 
-  // ---------- Delete ----------
-  const deleteProduct = (index: number) => {
-    const updated = products.filter((_, i) => i !== index)
-    saveProducts(updated)
+  // TAMBAH KATEGORI
+  const addCategory = async () => {
+    if (!newCategory.trim()) { setToast("Nama kategori tidak boleh kosong"); return }
+    try {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert([{ name: newCategory }])
+        .select()
+      if (error) throw error
+      if (data && data[0]) {
+        setCategories([...categories, data[0]])
+        setForm({ ...form, category: data[0].id })
+        setNewCategory("")
+        setToast("Kategori berhasil ditambahkan")
+      }
+    } catch (err) { console.error(err); setToast("Gagal menambahkan kategori") }
   }
 
-  // ---------- Add category ----------
-  const addCategory = () => {
-    if (!newCategory) return
-    if (categories.includes(newCategory)) {
-      alert("Kategori sudah ada!")
-      return
-    }
-    const updated = [...categories, newCategory]
-    setCategories(updated)
-    localStorage.setItem("categories", JSON.stringify(updated))
-    setNewCategory("")
+  // EDIT / HAPUS KATEGORI
+  const updateCategory = async () => {
+    if (!editCategoryId || !editCategoryName.trim()) { setToast("Nama kategori tidak boleh kosong"); return }
+    try {
+      const { error } = await supabase
+        .from("categories")
+        .update({ name: editCategoryName })
+        .eq("id", editCategoryId)
+      if (error) throw error
+      setCategories(categories.map(c => c.id === editCategoryId ? { ...c, name: editCategoryName } : c))
+      setEditCategoryId(null)
+      setEditCategoryName("")
+      setToast("Kategori diupdate")
+    } catch (err) { console.error(err); setToast("Gagal update kategori") }
   }
 
-  // ---------- RENDER LOGIN ----------
-  if (!isLoggedIn) {
-    return (
-      <div className="p-6 max-w-sm mx-auto mt-20 shadow-md rounded bg-white">
-        <h1 className="text-xl font-bold mb-4 text-center">Login Admin</h1>
-        <input
-          placeholder="Username"
-          value={usernameInput}
-          onChange={e => setUsernameInput(e.target.value)}
-          className="border p-2 w-full rounded mb-3"
-        />
-        <input
-          placeholder="Password"
-          type="password"
-          value={passwordInput}
-          onChange={e => setPasswordInput(e.target.value)}
-          className="border p-2 w-full rounded mb-3"
-        />
-        <button
-          onClick={login}
-          className="w-full py-2 text-white rounded bg-[#FC8FA7]"
-        >
-          Login
-        </button>
+  const deleteCategory = async (id: string) => {
+    if (!confirm("Yakin hapus kategori?")) return
+    try { const { error } = await supabase.from("categories").delete().eq("id", id); if (error) throw error } 
+    catch (err) { console.error(err); setToast("Gagal hapus kategori") }
+    setCategories(categories.filter(c => c.id !== id))
+    setToast("Kategori dihapus")
+  }
+
+  // HAPUS PRODUK
+  const deleteProduct = async (p: Product) => {
+    if (!confirm("Yakin hapus produk?")) return
+    const { error } = await supabase.from("products").delete().eq("id", p.id)
+    if (error) console.error(error)
+    else setToast("Produk dihapus")
+    fetchProducts()
+  }
+
+  const bulkDelete = async () => {
+    if (selected.length === 0) return
+    if (!confirm("Hapus semua produk terpilih?")) return
+    for (const id of selected) await supabase.from("products").delete().eq("id", id)
+    setSelected([])
+    setToast("Bulk delete berhasil")
+    fetchProducts()
+  }
+
+  // PAGINATION + SEARCH
+  const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
+  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+
+  // UI LOGIN
+  if (!isLoggedIn) return (
+    <div className="min-h-screen flex items-center justify-center bg-white text-black">
+      <div className="p-6 w-full max-w-sm shadow-md rounded-2xl space-y-3">
+        <h1 className="text-xl font-bold text-center">Login Admin</h1>
+        <input placeholder="Username" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} className="w-full p-2 rounded-lg shadow-sm focus:outline-none"/>
+        <input type="password" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full p-2 rounded-lg shadow-sm focus:outline-none"/>
+        <button onClick={login} className="w-full bg-gradient-to-br from-[#FC8FA7] to-[#F76C8F] text-white py-2 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition">Login</button>
+        {toast && <Toast message={toast}/>}
       </div>
-    )
-  }
+    </div>
+  )
 
-  // ---------- RENDER ADMIN PAGE ----------
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">Admin Produk</h1>
+    <div className="min-h-screen bg-white text-black p-6">
+      <div className="max-w-xl mx-auto space-y-6">
+        <h1 className="text-xl font-bold">Admin Produk</h1>
 
-      {/* FORM */}
-      <div className="mb-6 space-y-3">
-        <input
-          placeholder="Nama Produk"
-          value={form.name}
-          onChange={e => setForm({ ...form, name: e.target.value })}
-          className="border p-2 w-full rounded"
-        />
-        <input
-          placeholder="Harga"
-          type="number"
-          value={form.price}
-          onChange={e => setForm({ ...form, price: e.target.value })}
-          className="border p-2 w-full rounded"
-        />
-        <select
-          value={form.category}
-          onChange={e => setForm({ ...form, category: e.target.value })}
-          className="border p-2 w-full rounded"
-        >
-          <option value="">Pilih Kategori</option>
-          {categories.map((cat, i) => (
-            <option key={i} value={cat}>{cat}</option>
-          ))}
-        </select>
+        {/* FORM TAMBAH / EDIT PRODUK */}
+        <div className="bg-white shadow-md rounded-2xl p-4 space-y-3">
+          <h2 className="font-semibold">{form.id ? "Edit Produk" : "Tambah Produk"}</h2>
+          <input placeholder="Nama produk" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full p-2 rounded-lg shadow-sm focus:outline-none"/>
+          <input type="number" placeholder="Harga" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="w-full p-2 rounded-lg shadow-sm focus:outline-none"/>
+          <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full p-2 rounded-lg shadow-sm focus:outline-none">
+            <option value="">Pilih kategori</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
 
-        <div className="flex gap-2">
-          <input
-            placeholder="Kategori baru"
-            value={newCategory}
-            onChange={e => setNewCategory(e.target.value)}
-            className="border p-2 w-full rounded"
-          />
-          <button
-            onClick={addCategory}
-            className="px-4 bg-black text-white rounded"
-          >
-            +
-          </button>
+          <div className="flex gap-2 mt-2">
+            <input placeholder="Tambah kategori baru" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="flex-1 p-2 rounded-lg shadow-sm focus:outline-none"/>
+            <button onClick={addCategory} className="bg-gradient-to-br from-[#FC8FA7] to-[#F76C8F] text-white px-4 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition">Tambah</button>
+          </div>
+
+          <input type="file" onChange={e => { if (e.target.files?.[0]) handleImage(e.target.files[0]) }} />
+          {loading && <p className="text-sm text-gray-400">Uploading...</p>}
+          {form.image && <img src={form.image} className="w-20 h-20 rounded-xl object-cover"/>}
+          <button onClick={handleSubmit} className="w-full bg-gradient-to-br from-[#FC8FA7] to-[#F76C8F] text-white py-2 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-0.5 transition">{form.id ? "Update Produk" : "Tambah Produk"}</button>
         </div>
 
-        <input
-          type="file"
-          accept="image/*"
-          onChange={e => {
-            const file = e.target.files?.[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.onloadend = () => {
-              setForm({ ...form, image: reader.result as string })
-            }
-            reader.readAsDataURL(file)
-          }}
-          className="border p-2 w-full rounded"
-        />
+        {/* SEARCH + BULK DELETE */}
+        <input placeholder="Cari produk..." value={search} onChange={e => setSearch(e.target.value)} className="w-full p-2 rounded-lg shadow-sm focus:outline-none"/>
+        <button onClick={bulkDelete} className="w-full bg-red-500 text-white py-2 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-0.5 transition">Hapus Terpilih ({selected.length})</button>
 
-        {form.image && (
-          <img src={form.image} className="w-full h-40 object-cover rounded" />
-        )}
-
-        <button
-          onClick={handleSubmit}
-          className="w-full py-2 text-white rounded bg-[#FC8FA7]"
-        >
-          {editIndex !== null ? "Update Produk" : "Tambah Produk"}
-        </button>
-      </div>
-
-      {/* LIST PRODUK */}
-      {products.map((p, i) => (
-        <div key={p.id} className="flex justify-between items-center border-b py-3">
-          <div className="flex items-center gap-3">
-            {p.image && <img src={p.image} className="w-14 h-14 object-cover rounded" />}
-            <div>
-              <p className="font-medium">{p.name}</p>
-              <p className="text-sm text-gray-500">
-                Rp{p.price.toLocaleString("id-ID")} • {p.category}
-              </p>
+        {/* LIST PRODUK */}
+        {loadingFetch ? <p className="text-center text-gray-400">Loading...</p> :
+          paginated.map(p => (
+            <div key={p.id} className="flex justify-between items-center bg-white shadow-md rounded-xl p-3 hover:shadow-lg transition">
+              <div className="flex gap-3 items-center">
+                <input type="checkbox" checked={selected.includes(p.id)} onChange={e => { if (e.target.checked) setSelected([...selected, p.id]); else setSelected(selected.filter(id => id !== p.id)) }} />
+                <img src={p.image} className="w-14 h-14 rounded object-cover"/>
+                <div>
+                  <p className="font-medium">{p.name}</p>
+                  <p className="text-sm text-gray-500">Rp{p.price.toLocaleString("id-ID")} • {p.categories?.name}</p>
+                </div>
+              </div>
+              <div className="text-sm">
+                <button onClick={() => setForm({ id: p.id, name: p.name, price: p.price.toString(), category: p.category_id, image: p.image, oldImage: p.image })} className="text-blue-500 mr-3 hover:underline">Edit</button>
+                <button onClick={() => deleteProduct(p)} className="text-red-500 hover:underline">Hapus</button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center">
-            <button
-              onClick={() => {
-                setForm({
-                  id: p.id,
-                  name: p.name,
-                  price: p.price.toString(),
-                  category: p.category,
-                  image: p.image
-                })
-                setEditIndex(i)
-              }}
-              className="text-blue-500 text-sm mr-3"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => deleteProduct(i)}
-              className="text-red-500 text-sm"
-            >
-              Hapus
-            </button>
-          </div>
+          ))
+        }
+
+        {/* PAGINATION */}
+        <div className="flex gap-2 justify-center mt-3">
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button key={i} onClick={() => setPage(i+1)} className={`px-3 py-1 rounded-lg shadow transition ${page===i+1 ? "bg-gradient-to-br from-[#FC8FA7] to-[#F76C8F] text-white" : "bg-white"}`}>{i+1}</button>
+          ))}
         </div>
-      ))}
+
+        {/* KATEGORI EDIT / HAPUS */}
+        <div className="bg-white shadow-md rounded-2xl p-4 mt-4 space-y-2">
+          <h2 className="font-semibold">Kelola Kategori</h2>
+          {categories.map(c => (
+            <div key={c.id} className="flex justify-between items-center shadow-sm p-2 rounded-lg">
+              {editCategoryId === c.id ? (
+                <>
+                  <input value={editCategoryName} onChange={e => setEditCategoryName(e.target.value)} className="p-1 rounded shadow-sm"/>
+                  <button onClick={updateCategory} className="text-green-500 text-sm">Simpan</button>
+                </>
+              ) : (
+                <>
+                  <span>{c.name}</span>
+                  <div className="flex gap-2 text-sm">
+                    <button onClick={() => { setEditCategoryId(c.id); setEditCategoryName(c.name) }} className="text-blue-500">Edit</button>
+                    <button onClick={() => deleteCategory(c.id)} className="text-red-500">Hapus</button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {toast && <Toast message={toast}/>}
+      </div>
     </div>
   )
 }

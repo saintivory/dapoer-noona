@@ -1,13 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 
 type Product = {
   id: string
   name: string
   price: number
-  category: string
-  image: string
+  image: string | null
+  category?: string
+  categories?: {
+    name: string
+  }
   qty?: number
 }
 
@@ -19,17 +23,55 @@ type CartDrawerProps = {
 export default function CartDrawer({ open, onClose }: CartDrawerProps) {
   const [cart, setCart] = useState<Product[]>([])
 
+  // 🔥 LOAD + SYNC CART
   useEffect(() => {
     const updateCart = () => {
-      const data = JSON.parse(localStorage.getItem("cart") || "[]") as Product[]
+      const data = JSON.parse(localStorage.getItem("cart") || "[]")
       setCart(data)
     }
 
     updateCart()
+
+    const handleAdd = async (e: any) => {
+      const id = e.detail
+
+      const { data } = await supabase
+        .from("products")
+        .select("*, categories(name)")
+        .eq("id", id)
+        .single()
+
+      if (!data) return
+
+      const existingCart = JSON.parse(localStorage.getItem("cart") || "[]")
+
+      const index = existingCart.findIndex((p: any) => p.id === id)
+
+      if (index >= 0) {
+        existingCart[index].qty =
+          (existingCart[index].qty ?? 1) + 1
+      } else {
+        existingCart.push({
+          ...data,
+          category: data.categories?.name,
+          qty: 1,
+        })
+      }
+
+      localStorage.setItem("cart", JSON.stringify(existingCart))
+      updateCart()
+    }
+
+    window.addEventListener("addToCart", handleAdd)
     window.addEventListener("cartUpdated", updateCart)
-    return () => window.removeEventListener("cartUpdated", updateCart)
+
+    return () => {
+      window.removeEventListener("addToCart", handleAdd)
+      window.removeEventListener("cartUpdated", updateCart)
+    }
   }, [])
 
+  // 🔥 UPDATE LOCAL STORAGE
   const updateCartStorage = (newCart: Product[]) => {
     setCart(newCart)
     localStorage.setItem("cart", JSON.stringify(newCart))
@@ -59,23 +101,14 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
     updateCartStorage(newCart)
   }
 
-  const addToCart = (product: Product) => {
-    const existingCart = JSON.parse(localStorage.getItem("cart") || "[]") as Product[]
-    const index = existingCart.findIndex((p) => p.id === product.id)
-
-    if (index >= 0) {
-      existingCart[index].qty = (existingCart[index].qty ?? 1) + 1
-    } else {
-      existingCart.push({ ...product, qty: 1 })
-    }
-
-    updateCartStorage(existingCart)
-  }
-
-  const total = cart.reduce((sum, item) => sum + item.price * (item.qty ?? 1), 0)
+  const total = cart.reduce(
+    (sum, item) => sum + item.price * (item.qty ?? 1),
+    0
+  )
 
   const checkout = () => {
     if (cart.length === 0) return
+
     const message = cart
       .map(
         (item) =>
@@ -85,7 +118,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
       )
       .join("\n")
 
-    const text = `Assalamu'alaikum, *Admin Dapur Noona*,\n\nSaya ingin memesan:\n\n${message}\n\n*Total:* Rp${total.toLocaleString(
+    const text = `Assalamu'alaikum, *Admin Dapoer Noona*,\n\nSaya ingin memesan:\n\n${message}\n\n*Total:* Rp${total.toLocaleString(
       "id-ID"
     )}\n\nNama:\nAlamat:\nTanggal kirim:\nCatatan:\n\nTerimakasih yaa..`
 
@@ -122,13 +155,20 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
             cart.map((item, i) => (
               <div key={i} className="flex items-center gap-3 border-b pb-3 mb-3">
                 <img
-                  src={item.image || "https://via.placeholder.com/80"}
+                  src={item.image || "/no-image.png"}
                   alt={item.name}
                   className="w-16 h-16 object-cover rounded"
                 />
+
                 <div className="flex-1 flex flex-col">
-                  <p className="font-bold text-sm line-clamp-2">{item.name}</p>
-                  <p className="text-gray-500 text-xs">{item.category}</p>
+                  <p className="font-bold text-sm line-clamp-2">
+                    {item.name}
+                  </p>
+
+                  <p className="text-gray-500 text-xs">
+                    {item.category || item.categories?.name}
+                  </p>
+
                   <p className="font-bold text-sm mt-1">
                     Rp{(item.price * (item.qty ?? 1)).toLocaleString("id-ID")}
                   </p>
@@ -136,17 +176,20 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                   <div className="flex items-center gap-2 mt-2">
                     <button
                       onClick={() => decreaseQty(i)}
-                      className="px-2 py-1 border rounded text-sm"
+                      className="px-2 py-1 shadow rounded text-sm"
                     >
                       -
                     </button>
+
                     <span className="text-sm">{item.qty ?? 1}</span>
+
                     <button
                       onClick={() => increaseQty(i)}
-                      className="px-2 py-1 border rounded text-sm"
+                      className="px-2 py-1 shadow rounded text-sm"
                     >
                       +
                     </button>
+
                     <button
                       onClick={() => removeItem(i)}
                       className="ml-auto text-red-500 text-sm"
@@ -165,9 +208,10 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
           <p className="font-bold mb-2 text-lg">
             Total: Rp{total.toLocaleString("id-ID")}
           </p>
+
           <button
             onClick={checkout}
-            className="w-full py-3 text-white rounded-lg bg-gradient-to-r from-[#FC8FA7] to-pink-400 font-medium"
+            className="w-full py-3 text-white rounded-lg bg-gradient-to-r from-[#FC8FA7] to-[#F76C8F] shadow hover:scale-[1.02] transition"
           >
             Checkout via WhatsApp
           </button>
