@@ -41,7 +41,7 @@ Built with **Next.js** and fully integrated with **Supabase** for database & sto
 
 ### 2. Admin Page / Backend Management
 - **Admin Login**
-  - Secure login with static credentials (admin/noona2026).
+  - Secure login
   - Access to manage products and categories.
 
 - **Product Management**
