@@ -1,71 +1,74 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Product } from "@/types/product"
+
+type CartItem = Product & { qty: number; category?: string }
 
 type CartDrawerProps = {
   open: boolean
   onClose: () => void
-  products: Product[] // supabase products dari Home
+  products: Product[]
 }
 
 export default function CartDrawer({ open, onClose, products }: CartDrawerProps) {
-  const [cart, setCart] = useState<(Product & { qty: number; category?: string })[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
 
-  // 🔥 Load cart dari localStorage
+  // 🔹 Sync cart dari localStorage saat drawer dibuka
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("cart") || "[]")
-    setCart(saved)
+    if (open) {
+      const saved = JSON.parse(localStorage.getItem("cart") || "[]")
+      setCart(saved)
+    }
+  }, [open])
+
+  // 🔹 Update qty / hapus item secara efisien
+  const updateCart = useCallback((index: number, delta: number) => {
+    setCart((prevCart) => {
+      const newCart = [...prevCart]
+      const currentQty = newCart[index].qty ?? 1
+      const newQty = currentQty + delta
+      if (newQty <= 0) return prevCart
+      newCart[index] = { ...newCart[index], qty: newQty }
+      localStorage.setItem("cart", JSON.stringify(newCart))
+      return newCart
+    })
   }, [])
 
-  // 🔥 Update localStorage & state
-  const updateCartStorage = (newCart: typeof cart) => {
-    setCart(newCart)
-    localStorage.setItem("cart", JSON.stringify(newCart))
-  }
+  const removeItem = useCallback((index: number) => {
+    setCart((prevCart) => {
+      const newCart = prevCart.filter((_, i) => i !== index)
+      localStorage.setItem("cart", JSON.stringify(newCart))
+      return newCart
+    })
+  }, [])
 
-  // 🔹 Event listener untuk tambah ke cart
+  const total = cart.reduce((sum, item) => sum + item.price * (item.qty ?? 1), 0)
+
+  // 🔹 Event listener untuk addToCart (functional update)
   useEffect(() => {
     const handleAdd = (e: CustomEvent<string>) => {
       const productId = e.detail
       const prod = products.find((p) => p.id === productId)
       if (!prod) return
 
-      const newCart = [...cart]
-      const index = newCart.findIndex((p) => p.id === prod.id)
-      if (index >= 0) {
-        newCart[index].qty = (newCart[index].qty ?? 1) + 1
-      } else {
-        newCart.push({ ...prod, qty: 1, category: prod.categories?.name })
-      }
-      updateCartStorage(newCart)
+      setCart((prevCart) => {
+        const index = prevCart.findIndex((p) => p.id === prod.id)
+        let newCart: CartItem[]
+        if (index >= 0) {
+          newCart = [...prevCart]
+          newCart[index] = { ...newCart[index], qty: (newCart[index].qty ?? 1) + 1 }
+        } else {
+          newCart = [...prevCart, { ...prod, qty: 1, category: prod.categories?.name }]
+        }
+        localStorage.setItem("cart", JSON.stringify(newCart))
+        return newCart
+      })
     }
 
     window.addEventListener("addToCart", handleAdd as EventListener)
-    return () => {
-      window.removeEventListener("addToCart", handleAdd as EventListener)
-    }
-  }, [cart, products])
-
-  // 🔹 Ubah qty & hapus
-  const increaseQty = (i: number) => {
-    const newCart = [...cart]
-    newCart[i].qty = (newCart[i].qty ?? 1) + 1
-    updateCartStorage(newCart)
-  }
-
-  const decreaseQty = (i: number) => {
-    const newCart = [...cart]
-    if ((newCart[i].qty ?? 1) > 1) newCart[i].qty!--
-    updateCartStorage(newCart)
-  }
-
-  const removeItem = (i: number) => {
-    const newCart = cart.filter((_, idx) => idx !== i)
-    updateCartStorage(newCart)
-  }
-
-  const total = cart.reduce((sum, item) => sum + item.price * (item.qty ?? 1), 0)
+    return () => window.removeEventListener("addToCart", handleAdd as EventListener)
+  }, [products])
 
   const checkout = () => {
     if (!cart.length) return
@@ -116,9 +119,9 @@ export default function CartDrawer({ open, onClose, products }: CartDrawerProps)
                     Rp{(item.price * (item.qty ?? 1)).toLocaleString("id-ID")}
                   </p>
                   <div className="flex items-center gap-2 mt-2">
-                    <button onClick={() => decreaseQty(i)} className="px-2 py-1 shadow rounded text-sm">-</button>
+                    <button onClick={() => updateCart(i, -1)} className="px-2 py-1 shadow rounded text-sm">-</button>
                     <span className="text-sm">{item.qty ?? 1}</span>
-                    <button onClick={() => increaseQty(i)} className="px-2 py-1 shadow rounded text-sm">+</button>
+                    <button onClick={() => updateCart(i, 1)} className="px-2 py-1 shadow rounded text-sm">+</button>
                     <button onClick={() => removeItem(i)} className="ml-auto text-red-500 text-sm">Hapus</button>
                   </div>
                 </div>

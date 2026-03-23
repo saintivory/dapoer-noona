@@ -4,9 +4,9 @@ export type Product = {
   price: number
   image: string | null
   category_id: string
-  qty?: number
   categories?: {
     id?: string
     name: string
   }
+  qty?: number // ✅ tambah optional qty
 }
